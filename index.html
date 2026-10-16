@@ -1,0 +1,126 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Venue Ticketing System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <header>
+        <h1>Eventify</h1>
+        <p>Interactive Venue Ticketing System</p>
+    </header>
+
+    <main>
+
+        <section class="venue-info">
+            <h2>Concert Hall</h2>
+            <p>Select a seat to view its details and ticket price.</p>
+        </section>
+
+        <div class="main-container">
+
+            <section class="venue-section">
+
+                <h2>Venue Map</h2>
+
+                <div class="stage">
+                    STAGE
+                </div>
+
+                <div class="map-controls">
+                    <button id="zoomIn">Zoom In +</button>
+                    <button id="zoomOut">Zoom Out -</button>
+                    <button id="moveUp">Move Up ↑</button>
+                    <button id="moveDown">Move Down ↓</button>
+                    <button id="moveLeft">Move Left ←</button>
+                    <button id="moveRight">Move Right →</button>
+                    <button id="resetView">Reset View</button>
+                </div>
+
+                <div class="map-viewport">
+                    <div id="venueMap">
+
+                        <div class="seat-section">
+                            <h3>VIP Section</h3>
+                            <div id="vipSeats" class="seats-container"></div>
+                        </div>
+
+                        <div class="seat-section">
+                            <h3>Premium Section</h3>
+                            <div id="premiumSeats" class="seats-container"></div>
+                        </div>
+
+                        <div class="seat-section">
+                            <h3>Standard Section</h3>
+                            <div id="standardSeats" class="seats-container"></div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div class="seat-legend">
+                    <div>
+                        <span class="legend-box available"></span>
+                        Available
+                    </div>
+
+                    <div>
+                        <span class="legend-box selected"></span>
+                        Inspected
+                    </div>
+
+                    <div>
+                        <span class="legend-box in-cart"></span>
+                        In Cart
+                    </div>
+
+                    <div>
+                        <span class="legend-box unavailable"></span>
+                        Unavailable
+                    </div>
+                </div>
+
+            </section>
+
+            <aside class="details-panel">
+                <h2>Seat Details</h2>
+
+                <div id="seatDetails">
+                    <p>Select a seat to see its information.</p>
+                </div>
+
+                <button id="addToCart" disabled>
+                    ADD TO CART
+                </button>
+            </aside>
+
+            <aside class="cart-panel">
+                <h2>Your Cart</h2>
+
+                <div id="cartItems">
+                    <p>Your cart is empty.</p>
+                </div>
+
+                <div class="cart-total">
+                    <h3>Total:</h3>
+                    <p id="totalPrice">0 AZN</p>
+                </div>
+            </aside>
+
+        </div>
+
+    </main>
+
+    <footer>
+        <p>Eventify | Interactive Venue Ticketing System</p>
+    </footer>
+
+    <script src="script.js"></script>
+
+</body>
+</html>
+```
