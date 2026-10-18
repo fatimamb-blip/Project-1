@@ -31,3 +31,39 @@ main {
     padding: 30px 50px;
 }
 
+.venue-info {
+    margin-bottom: 30px;
+}
+
+.venue-info h2 {
+    font-size: 26px;
+    margin-bottom: 8px;
+}
+
+.venue-info p {
+    color: #aaaac0;
+}
+
+.main-container {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 25px;
+    align-items: start;
+}
+
+.venue-section,
+.details-panel,
+.cart-panel {
+    background-color: #1b1b2e;
+    padding: 25px;
+    border-radius: 12px;
+    border: 1px solid #33334d;
+}
+
+.venue-section h2,
+.details-panel h2,
+.cart-panel h2 {
+    margin-bottom: 20px;
+    font-size: 21px;
+}
+
