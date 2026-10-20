@@ -112,4 +112,239 @@ const VENUE = {
   ]
 };
 
-
+(function () {
+  'use strict';
+ 
+  const ZOOM_MIN = 0.2;
+  const ZOOM_MAX = 3;
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+ 
+  const $ = (selector) => document.querySelector(selector);
+  const dom = {
+    viewport: $('#viewport'),
+    venue: $('#venue'),
+    zoomLevel: $('#zoomLevel'),
+    btn: {
+      zoomIn: $('#btnZoomIn'),
+      zoomOut: $('#btnZoomOut'),
+      up: $('#btnUp'),
+      down: $('#btnDown'),
+      left: $('#btnLeft'),
+      right: $('#btnRight'),
+      reset: $('#btnReset')
+    }
+  };
+ 
+  const seats = [];
+  const seatsById = new Map();
+  const seatEls = new Map();
+ 
+  const state = {
+    view: { scale: 1, x: 0, y: 0, fitted: true }
+  };
+ 
+  const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+ 
+  const formatPrice = (amount) => `${VENUE.currency.symbol}${amount.toFixed(2)}`;
+ 
+  function hexToRgba(hex, alpha) {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+  }
+ 
+  function hashToUnit(text) {
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < text.length; i++) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 0x01000193);
+    }
+    return (hash >>> 0) / 4294967296;
+  }
+ 
+  function buildModel() {
+    const { seatSize, seatStep, rowStep, aisleWidth, unavailability } = VENUE;
+    const blocked = new Set(unavailability.blocked || []);
+ 
+    VENUE.sections.forEach((section) => {
+      const aisles = section.aisleAfter || [];
+      const curve = section.curve || 0;
+      const rowWidth = (section.seatsPerRow - 1) * seatStep + seatSize + aisles.length * aisleWidth;
+      const left = section.cx - rowWidth / 2;
+      const middle = (section.seatsPerRow - 1) / 2;
+ 
+      section.bounds = {
+        left: left - 34,
+        top: section.y - curve - 34,
+        width: rowWidth + 68,
+        height: (section.rows.length - 1) * rowStep + seatSize + curve + 46
+      };
+      section.rowLabels = [];
+ 
+      section.rows.forEach((row, rowIndex) => {
+        let x = left;
+        const rowSeats = [];
+ 
+        for (let number = 1; number <= section.seatsPerRow; number++) {
+          const offset = middle ? (number - 1 - middle) / middle : 0;
+          const y = Math.round(section.y + rowIndex * rowStep - curve * offset * offset);
+          const id = `${section.id}-${row}-${number}`;
+ 
+          const seat = {
+            id,
+            sectionId: section.id,
+            sectionName: section.name,
+            row,
+            number,
+            category: section.category,
+            price: VENUE.categories[section.category].price,
+            x: Math.round(x),
+            y,
+            unavailable: blocked.has(id) || hashToUnit(unavailability.seed + id) < unavailability.rate
+          };
+ 
+          seats.push(seat);
+          seatsById.set(id, seat);
+          rowSeats.push(seat);
+ 
+          x += seatStep;
+          if (aisles.includes(number)) x += aisleWidth;
+        }
+ 
+        section.rowLabels.push({ row, first: rowSeats[0], last: rowSeats[rowSeats.length - 1] });
+      });
+    });
+  }
+ 
+  function renderVenue() {
+    const venue = dom.venue;
+    venue.style.width = `${VENUE.width}px`;
+    venue.style.height = `${VENUE.height}px`;
+    const fragment = document.createDocumentFragment();
+ 
+    VENUE.features.forEach((feature) => {
+      const el = document.createElement('div');
+      el.className = `feature feature--${feature.type}`;
+      el.style.left = `${feature.x}px`;
+      el.style.top = `${feature.y}px`;
+      el.style.width = `${feature.w}px`;
+      el.style.height = `${feature.h}px`;
+      el.textContent = feature.label;
+      el.setAttribute('aria-hidden', 'true');
+      fragment.appendChild(el);
+    });
+ 
+    VENUE.sections.forEach((section) => {
+      const cat = VENUE.categories[section.category];
+ 
+      const zone = document.createElement('div');
+      zone.className = 'zone';
+      zone.style.backgroundColor = hexToRgba(cat.color, 0.07);
+      zone.style.borderColor = hexToRgba(cat.color, 0.32);
+      zone.style.left = `${section.bounds.left}px`;
+      zone.style.top = `${section.bounds.top}px`;
+      zone.style.width = `${section.bounds.width}px`;
+      zone.style.height = `${section.bounds.height}px`;
+      zone.setAttribute('aria-hidden', 'true');
+      const label = document.createElement('span');
+      label.className = 'zone__label';
+      label.style.color = cat.color;
+      label.textContent = `${section.name} · ${cat.label} · ${formatPrice(cat.price)}`;
+      zone.appendChild(label);
+      fragment.appendChild(zone);
+ 
+      section.rowLabels.forEach(({ row, first, last }) => {
+        [[first.x - 22, first.y], [last.x + VENUE.seatSize + 4, last.y]].forEach(([x, y]) => {
+          const rowLabel = document.createElement('span');
+          rowLabel.className = 'row-label';
+          rowLabel.style.left = `${x}px`;
+          rowLabel.style.top = `${y}px`;
+          rowLabel.textContent = row;
+          rowLabel.setAttribute('aria-hidden', 'true');
+          fragment.appendChild(rowLabel);
+        });
+      });
+ 
+      const group = document.createElement('div');
+      group.className = 'seat-group';
+      group.setAttribute('role', 'group');
+      group.setAttribute('aria-label', `${section.name} — ${cat.label}, ${formatPrice(cat.price)}`);
+ 
+      seats
+        .filter((seat) => seat.sectionId === section.id)
+        .forEach((seat) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = `seat seat--${seat.category}`;
+          button.dataset.id = seat.id;
+          button.style.left = `${seat.x}px`;
+          button.style.top = `${seat.y}px`;
+          button.textContent = seat.number;
+          seatEls.set(seat.id, button);
+          group.appendChild(button);
+        });
+ 
+      fragment.appendChild(group);
+    });
+ 
+    venue.replaceChildren(fragment);
+  }
+ 
+  function viewportSize() {
+    return { vw: dom.viewport.clientWidth, vh: dom.viewport.clientHeight };
+  }
+ 
+  function getBounds(scale) {
+    const { vw, vh } = viewportSize();
+    const cw = VENUE.width * scale;
+    const ch = VENUE.height * scale;
+    const axis = (view, content, margin) =>
+      content <= view
+        ? { min: 0, max: view - content }
+        : { min: view - content - margin, max: margin };
+    const bx = axis(vw, cw, Math.min(80, vw * 0.2));
+    const by = axis(vh, ch, Math.min(80, vh * 0.2));
+    return { minX: bx.min, maxX: bx.max, minY: by.min, maxY: by.max };
+  }
+ 
+  function applyView(animate = false) {
+    const view = state.view;
+    const bounds = getBounds(view.scale);
+    view.x = clamp(view.x, bounds.minX, bounds.maxX);
+    view.y = clamp(view.y, bounds.minY, bounds.maxY);
+ 
+    dom.venue.classList.toggle('is-animating', animate && !reducedMotion);
+    dom.venue.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
+    dom.zoomLevel.textContent = `${Math.round(view.scale * 100)}%`;
+ 
+    const eps = 0.5;
+    dom.btn.zoomIn.disabled = view.scale >= ZOOM_MAX - 0.001;
+    dom.btn.zoomOut.disabled = view.scale <= ZOOM_MIN + 0.001;
+    dom.btn.up.disabled = view.y >= bounds.maxY - eps;
+    dom.btn.down.disabled = view.y <= bounds.minY + eps;
+    dom.btn.left.disabled = view.x >= bounds.maxX - eps;
+    dom.btn.right.disabled = view.x <= bounds.minX + eps;
+  }
+ 
+  function resetView(animate = true) {
+    const { vw, vh } = viewportSize();
+    if (!vw || !vh) return;
+    const scale = clamp(Math.min(vw / VENUE.width, vh / VENUE.height) * 0.96, ZOOM_MIN, ZOOM_MAX);
+    state.view.scale = scale;
+    state.view.x = (vw - VENUE.width * scale) / 2;
+    state.view.y = (vh - VENUE.height * scale) / 2;
+    state.view.fitted = true;
+    applyView(animate);
+  }
+ 
+  function bindEvents() {
+  }
+ 
+  function init() {
+    buildModel();
+    renderVenue();
+    bindEvents();
+    resetView(false);
+  }
+ 
+  init();
+})();
