@@ -140,6 +140,8 @@ const VENUE = {
   const seatEls = new Map();
  
   const state = {
+    cart: [],
+    inspectedId: null,
     view: { scale: 1, x: 0, y: 0, fitted: true }
   };
  
@@ -147,10 +149,16 @@ const VENUE = {
  
   const formatPrice = (amount) => `${VENUE.currency.symbol}${amount.toFixed(2)}`;
  
+  const category = (seat) => VENUE.categories[seat.category];
+ 
+  const isInCart = (id) => state.cart.includes(id);
+ 
   function hexToRgba(hex, alpha) {
     const n = parseInt(hex.slice(1), 16);
     return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
   }
+ 
+  const seatName = (seat) => `${seat.sectionName}, Row ${seat.row}, Seat ${seat.number}`;
  
   function hashToUnit(text) {
     let hash = 0x811c9dc5;
@@ -160,6 +168,18 @@ const VENUE = {
     }
     return (hash >>> 0) / 4294967296;
   }
+ 
+  function seatStatus(seat) {
+    if (seat.unavailable) return 'unavailable';
+    if (isInCart(seat.id)) return 'in-cart';
+    return 'available';
+  }
+ 
+  const STATUS_TEXT = {
+    'available': 'Available',
+    'in-cart': 'In your cart',
+    'unavailable': 'Unavailable'
+  };
  
   function buildModel() {
     const { seatSize, seatStep, rowStep, aisleWidth, unavailability } = VENUE;
@@ -279,6 +299,10 @@ const VENUE = {
           button.style.left = `${seat.x}px`;
           button.style.top = `${seat.y}px`;
           button.textContent = seat.number;
+          if (seat.unavailable) {
+            button.classList.add('is-unavailable');
+            button.setAttribute('aria-disabled', 'true');
+          }
           seatEls.set(seat.id, button);
           group.appendChild(button);
         });
@@ -287,6 +311,26 @@ const VENUE = {
     });
  
     venue.replaceChildren(fragment);
+  }
+ 
+  function updateSeat(id) {
+    const seat = seatsById.get(id);
+    const button = seatEls.get(id);
+    if (!seat || !button) return;
+ 
+    const status = seatStatus(seat);
+    const inspected = state.inspectedId === id;
+ 
+    button.classList.toggle('is-in-cart', status === 'in-cart');
+    button.classList.toggle('is-inspected', inspected);
+    button.setAttribute('aria-pressed', String(inspected));
+    button.setAttribute('aria-label',
+      `${seatName(seat)}, ${category(seat).label}, ${formatPrice(seat.price)}, ${STATUS_TEXT[status]}`);
+    button.title = `${seatName(seat)} — ${formatPrice(seat.price)} (${STATUS_TEXT[status]})`;
+  }
+ 
+  function updateAllSeats() {
+    seats.forEach((seat) => updateSeat(seat.id));
   }
  
   function viewportSize() {
@@ -342,6 +386,7 @@ const VENUE = {
   function init() {
     buildModel();
     renderVenue();
+    updateAllSeats();
     bindEvents();
     resetView(false);
   }
