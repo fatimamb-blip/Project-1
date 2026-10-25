@@ -123,6 +123,8 @@ const VENUE = {
   const dom = {
     viewport: $('#viewport'),
     venue: $('#venue'),
+    detailsTitle: $('#detailsTitle'),
+    detailsBody: $('#detailsBody'),
     zoomLevel: $('#zoomLevel'),
     btn: {
       zoomIn: $('#btnZoomIn'),
@@ -313,6 +315,56 @@ const VENUE = {
     venue.replaceChildren(fragment);
   }
  
+  function renderDetails() {
+    const seat = state.inspectedId ? seatsById.get(state.inspectedId) : null;
+ 
+    if (!seat) {
+      dom.detailsBody.innerHTML = `
+        <div class="details__empty">
+          <p><strong>No seat selected.</strong></p>
+          <p>Click any seat on the map to see its section, row, number and price.
+             Nothing is added to your cart until you press <strong>ADD TO CART</strong>.</p>
+        </div>`;
+      return;
+    }
+ 
+    const cat = category(seat);
+    const status = seatStatus(seat);
+ 
+    let note = '';
+    if (status === 'unavailable') note = 'This seat is already sold and cannot be added to the cart.';
+    else if (status === 'in-cart') note = 'This seat is already in your cart. Each seat can only be added once.';
+ 
+    dom.detailsBody.innerHTML = `
+      <div class="details__head">
+        <span class="details__swatch" style="background:${cat.color}" aria-hidden="true"></span>
+        <div>
+          <p class="eyebrow">Section</p>
+          <h3 class="details__section">${seat.sectionName}</h3>
+        </div>
+        <button type="button" class="icon-btn" data-action="close" aria-label="Close seat details" title="Close (Esc)">×</button>
+      </div>
+ 
+      <dl class="details__grid">
+        <div><dt>Row</dt><dd>${seat.row}</dd></div>
+        <div><dt>Seat</dt><dd>${seat.number}</dd></div>
+        <div><dt>Category</dt><dd>${cat.label}</dd></div>
+        <div><dt>Seat ID</dt><dd class="mono">${seat.id}</dd></div>
+      </dl>
+ 
+      <p class="details__desc">${cat.description}</p>
+ 
+      <div class="details__price">
+        <span>Ticket price</span>
+        <strong>${formatPrice(seat.price)}</strong>
+      </div>
+ 
+      <p class="status status--${status}">${STATUS_TEXT[status]}</p>
+ 
+      ${note ? `<p class="details__note">${note}</p>` : ''}
+      <button type="button" class="link-btn" data-action="locate">Show seat on map</button>`;
+  }
+ 
   function updateSeat(id) {
     const seat = seatsById.get(id);
     const button = seatEls.get(id);
@@ -331,6 +383,17 @@ const VENUE = {
  
   function updateAllSeats() {
     seats.forEach((seat) => updateSeat(seat.id));
+  }
+ 
+  function inspectSeat(id, { center = false } = {}) {
+    const previous = state.inspectedId;
+    state.inspectedId = id && seatsById.has(id) ? id : null;
+ 
+    if (previous && previous !== state.inspectedId) updateSeat(previous);
+    if (state.inspectedId) updateSeat(state.inspectedId);
+    renderDetails();
+ 
+    if (center && state.inspectedId) centerOnSeat(seatsById.get(state.inspectedId), 1.2);
   }
  
   function viewportSize() {
@@ -380,13 +443,51 @@ const VENUE = {
     applyView(animate);
   }
  
+  function centerOnSeat(seat, minScale) {
+    const { vw, vh } = viewportSize();
+    const view = state.view;
+    view.scale = clamp(Math.max(view.scale, minScale || 0), ZOOM_MIN, ZOOM_MAX);
+    const half = VENUE.seatSize / 2;
+    view.x = vw / 2 - (seat.x + half) * view.scale;
+    view.y = vh / 2 - (seat.y + half) * view.scale;
+    view.fitted = false;
+    applyView(true);
+  }
+ 
   function bindEvents() {
+    dom.venue.addEventListener('click', (event) => {
+      const button = event.target.closest('.seat');
+      if (!button) return;
+      inspectSeat(button.dataset.id);
+    });
+ 
+    dom.detailsBody.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-action]');
+      if (!button || !state.inspectedId) return;
+      const id = state.inspectedId;
+ 
+      switch (button.dataset.action) {
+        case 'close':
+          inspectSeat(null);
+          break;
+        case 'locate':
+          centerOnSeat(seatsById.get(id), 1.2);
+          break;
+        default: break;
+      }
+    });
+ 
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && state.inspectedId) inspectSeat(null);
+    });
+ 
   }
  
   function init() {
     buildModel();
     renderVenue();
     updateAllSeats();
+    renderDetails();
     bindEvents();
     resetView(false);
   }
