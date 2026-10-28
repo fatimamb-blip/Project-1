@@ -117,6 +117,8 @@ const VENUE = {
  
   const ZOOM_MIN = 0.2;
   const ZOOM_MAX = 3;
+  const ZOOM_STEP = 1.25;
+  const PAN_STEP = 120;
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
  
   const $ = (selector) => document.querySelector(selector);
@@ -432,6 +434,30 @@ const VENUE = {
     dom.btn.right.disabled = view.x <= bounds.minX + eps;
   }
  
+  function zoomAt(factor, px, py, animate) {
+    const view = state.view;
+    const next = clamp(view.scale * factor, ZOOM_MIN, ZOOM_MAX);
+    if (Math.abs(next - view.scale) < 0.0001) return;
+    const k = next / view.scale;
+    view.x = px - (px - view.x) * k;
+    view.y = py - (py - view.y) * k;
+    view.scale = next;
+    view.fitted = false;
+    applyView(animate);
+  }
+ 
+  function zoomAtCenter(factor) {
+    const { vw, vh } = viewportSize();
+    zoomAt(factor, vw / 2, vh / 2, true);
+  }
+ 
+  function panBy(dx, dy, animate = true) {
+    state.view.x += dx;
+    state.view.y += dy;
+    state.view.fitted = false;
+    applyView(animate);
+  }
+ 
   function resetView(animate = true) {
     const { vw, vh } = viewportSize();
     if (!vw || !vh) return;
@@ -454,11 +480,40 @@ const VENUE = {
     applyView(true);
   }
  
+  function navigate(action) {
+    switch (action) {
+      case 'zoom-in': zoomAtCenter(ZOOM_STEP); break;
+      case 'zoom-out': zoomAtCenter(1 / ZOOM_STEP); break;
+      case 'up': panBy(0, PAN_STEP); break;
+      case 'down': panBy(0, -PAN_STEP); break;
+      case 'left': panBy(PAN_STEP, 0); break;
+      case 'right': panBy(-PAN_STEP, 0); break;
+      case 'reset': resetView(true); break;
+      default: break;
+    }
+  }
+ 
   function bindEvents() {
     dom.venue.addEventListener('click', (event) => {
       const button = event.target.closest('.seat');
       if (!button) return;
       inspectSeat(button.dataset.id);
+    });
+ 
+    document.querySelectorAll('[data-nav]').forEach((button) => {
+      button.addEventListener('click', () => navigate(button.dataset.nav));
+    });
+ 
+    const keyMap = {
+      ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
+      '+': 'zoom-in', '=': 'zoom-in', '-': 'zoom-out', '_': 'zoom-out', '0': 'reset'
+    };
+    dom.viewport.addEventListener('keydown', (event) => {
+      if (event.target !== dom.viewport) return;
+      const action = keyMap[event.key];
+      if (!action) return;
+      event.preventDefault();
+      navigate(action);
     });
  
     dom.detailsBody.addEventListener('click', (event) => {
