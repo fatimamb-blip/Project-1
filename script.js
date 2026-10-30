@@ -119,14 +119,24 @@ const VENUE = {
   const ZOOM_MAX = 3;
   const ZOOM_STEP = 1.25;
   const PAN_STEP = 120;
+  const MAX_TICKETS = VENUE.maxTicketsPerOrder;
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
  
   const $ = (selector) => document.querySelector(selector);
   const dom = {
     viewport: $('#viewport'),
     venue: $('#venue'),
+    priceLegend: $('#priceLegend'),
     detailsTitle: $('#detailsTitle'),
     detailsBody: $('#detailsBody'),
+    cartTitle: $('#cartTitle'),
+    cartList: $('#cartList'),
+    cartEmpty: $('#cartEmpty'),
+    cartTotal: $('#cartTotal'),
+    cartQty: $('#cartQty'),
+    cartLimit: $('#cartLimit'),
+    cartBadge: $('#cartBadge'),
+    clearCart: $('#clearCart'),
     zoomLevel: $('#zoomLevel'),
     btn: {
       zoomIn: $('#btnZoomIn'),
@@ -317,6 +327,20 @@ const VENUE = {
     venue.replaceChildren(fragment);
   }
  
+  function renderLegend() {
+    dom.priceLegend.innerHTML = Object.entries(VENUE.categories)
+      .map(([key, cat]) => {
+        const free = seats.filter((s) => s.category === key && !s.unavailable && !isInCart(s.id)).length;
+        return `<li>
+            <span class="legend__swatch" style="background:${cat.color}" aria-hidden="true"></span>
+            <span>${cat.label}</span>
+            <strong>${formatPrice(cat.price)}</strong>
+            <small>${free} left</small>
+          </li>`;
+      })
+      .join('');
+  }
+ 
   function renderDetails() {
     const seat = state.inspectedId ? seatsById.get(state.inspectedId) : null;
  
@@ -332,10 +356,13 @@ const VENUE = {
  
     const cat = category(seat);
     const status = seatStatus(seat);
+    const cartFull = state.cart.length >= MAX_TICKETS;
+    const canAdd = status === 'available' && !cartFull;
  
     let note = '';
     if (status === 'unavailable') note = 'This seat is already sold and cannot be added to the cart.';
     else if (status === 'in-cart') note = 'This seat is already in your cart. Each seat can only be added once.';
+    else if (cartFull) note = `You have reached the limit of ${MAX_TICKETS} tickets per order.`;
  
     dom.detailsBody.innerHTML = `
       <div class="details__head">
@@ -363,8 +390,48 @@ const VENUE = {
  
       <p class="status status--${status}">${STATUS_TEXT[status]}</p>
  
+      <button type="button" class="btn btn--primary btn--block" data-action="add" ${canAdd ? '' : 'disabled'}>
+        ADD TO CART
+      </button>
+      ${status === 'in-cart'
+        ? '<button type="button" class="btn btn--ghost btn--block" data-action="remove">Remove from cart</button>'
+        : ''}
       ${note ? `<p class="details__note">${note}</p>` : ''}
       <button type="button" class="link-btn" data-action="locate">Show seat on map</button>`;
+  }
+ 
+  function renderCart() {
+    const items = state.cart.map((id) => seatsById.get(id)).filter(Boolean);
+    const total = items.reduce((sum, seat) => sum + seat.price, 0);
+ 
+    dom.cartList.innerHTML = items
+      .map((seat) => {
+        const cat = category(seat);
+        return `<li class="cart-item">
+            <span class="cart-item__dot" style="background:${cat.color}" aria-hidden="true"></span>
+            <button type="button" class="cart-item__info" data-action="locate" data-id="${seat.id}"
+                    title="Show this seat on the map">
+              <span class="cart-item__name">${seat.sectionName}</span>
+              <span class="cart-item__meta">Row ${seat.row} · Seat ${seat.number} · ${cat.label}</span>
+            </button>
+            <span class="cart-item__price">${formatPrice(seat.price)}</span>
+            <button type="button" class="cart-item__remove" data-action="remove" data-id="${seat.id}"
+                    aria-label="Remove ${seatName(seat)} from cart" title="Remove">×</button>
+          </li>`;
+      })
+      .join('');
+ 
+    const count = items.length;
+    dom.cartEmpty.hidden = count > 0;
+    dom.cartTotal.textContent = formatPrice(total);
+    dom.cartQty.textContent = `${count} ticket${count === 1 ? '' : 's'}`;
+    dom.cartBadge.textContent = count;
+    dom.clearCart.disabled = count === 0;
+    dom.cartLimit.textContent = count >= MAX_TICKETS
+      ? `Maximum of ${MAX_TICKETS} tickets per order reached.`
+      : `You can add ${MAX_TICKETS - count} more ticket${MAX_TICKETS - count === 1 ? '' : 's'}.`;
+ 
+    renderLegend();
   }
  
   function updateSeat(id) {
@@ -396,6 +463,45 @@ const VENUE = {
     renderDetails();
  
     if (center && state.inspectedId) centerOnSeat(seatsById.get(state.inspectedId), 1.2);
+  }
+ 
+  function addToCart(id) {
+    const seat = seatsById.get(id);
+    if (!seat) return false;
+ 
+    if (seat.unavailable) {
+      return false;
+    }
+    if (isInCart(id)) {
+      return false;
+    }
+ 
+    state.cart.push(id);
+    updateSeat(id);
+    renderCart();
+    renderDetails();
+    return true;
+  }
+ 
+  function removeFromCart(id) {
+    if (!isInCart(id)) return false;
+ 
+    state.cart = state.cart.filter((cartId) => cartId !== id);
+    updateSeat(id);
+    renderCart();
+    renderDetails();
+    return true;
+  }
+ 
+  function clearCart() {
+    if (!state.cart.length) return;
+    if (!window.confirm('Remove all tickets from your cart?')) return;
+ 
+    const removed = state.cart.slice();
+    state.cart = [];
+    removed.forEach(updateSeat);
+    renderCart();
+    renderDetails();
   }
  
   function viewportSize() {
@@ -522,6 +628,14 @@ const VENUE = {
       const id = state.inspectedId;
  
       switch (button.dataset.action) {
+        case 'add':
+          if (addToCart(id)) {
+          }
+          break;
+        case 'remove':
+          if (removeFromCart(id)) {
+          }
+          break;
         case 'close':
           inspectSeat(null);
           break;
@@ -531,6 +645,20 @@ const VENUE = {
         default: break;
       }
     });
+ 
+    dom.cartList.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-action]');
+      if (!button) return;
+      const id = button.dataset.id;
+ 
+      if (button.dataset.action === 'remove') {
+        removeFromCart(id);
+      } else if (button.dataset.action === 'locate') {
+        inspectSeat(id, { center: true });
+      }
+    });
+ 
+    dom.clearCart.addEventListener('click', clearCart);
  
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && state.inspectedId) inspectSeat(null);
@@ -542,6 +670,7 @@ const VENUE = {
     buildModel();
     renderVenue();
     updateAllSeats();
+    renderCart();
     renderDetails();
     bindEvents();
     resetView(false);
