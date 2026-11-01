@@ -115,6 +115,7 @@ const VENUE = {
 (function () {
   'use strict';
  
+  const STORAGE_KEY = 'aurora-hall-cart-v1';
   const ZOOM_MIN = 0.2;
   const ZOOM_MAX = 3;
   const ZOOM_STEP = 1.25;
@@ -477,6 +478,7 @@ const VENUE = {
     }
  
     state.cart.push(id);
+    saveCart();
     updateSeat(id);
     renderCart();
     renderDetails();
@@ -487,6 +489,7 @@ const VENUE = {
     if (!isInCart(id)) return false;
  
     state.cart = state.cart.filter((cartId) => cartId !== id);
+    saveCart();
     updateSeat(id);
     renderCart();
     renderDetails();
@@ -499,9 +502,51 @@ const VENUE = {
  
     const removed = state.cart.slice();
     state.cart = [];
+    saveCart();
     removed.forEach(updateSeat);
     renderCart();
     renderDetails();
+  }
+ 
+  function saveCart() {
+    const data = {
+      version: 1,
+      savedAt: new Date().toISOString(),
+      items: state.cart.map((id) => ({ id, price: seatsById.get(id).price }))
+    };
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch (error) {
+    }
+  }
+ 
+  function loadCart() {
+    let raw = null;
+    try {
+      raw = localStorage.getItem(STORAGE_KEY);
+    } catch (error) {
+      return { ids: [], dropped: 0 };
+    }
+    if (!raw) return { ids: [], dropped: 0 };
+ 
+    try {
+      const data = JSON.parse(raw);
+      const items = Array.isArray(data && data.items) ? data.items : [];
+      const ids = [];
+      items.forEach((item) => {
+        const id = typeof item === 'string' ? item : item && item.id;
+        const seat = seatsById.get(id);
+        if (seat && !seat.unavailable && !ids.includes(id) && ids.length < MAX_TICKETS) ids.push(id);
+      });
+      return { ids, dropped: items.length - ids.length };
+    } catch (error) {
+      return { ids: [], dropped: 1 };
+    }
+  }
+ 
+  function restoreCart() {
+    const { ids, dropped } = loadCart();
+    state.cart = ids;
   }
  
   function viewportSize() {
@@ -669,6 +714,7 @@ const VENUE = {
   function init() {
     buildModel();
     renderVenue();
+    restoreCart();
     updateAllSeats();
     renderCart();
     renderDetails();
