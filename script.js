@@ -139,6 +139,7 @@ const VENUE = {
     cartBadge: $('#cartBadge'),
     clearCart: $('#clearCart'),
     zoomLevel: $('#zoomLevel'),
+    toast: $('#toast'),
     btn: {
       zoomIn: $('#btnZoomIn'),
       zoomOut: $('#btnZoomOut'),
@@ -195,6 +196,14 @@ const VENUE = {
     'in-cart': 'In your cart',
     'unavailable': 'Unavailable'
   };
+ 
+  let toastTimer = null;
+  function showToast(message) {
+    dom.toast.textContent = message;
+    dom.toast.classList.add('is-visible');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => dom.toast.classList.remove('is-visible'), 2600);
+  }
  
   function buildModel() {
     const { seatSize, seatStep, rowStep, aisleWidth, unavailability } = VENUE;
@@ -471,9 +480,15 @@ const VENUE = {
     if (!seat) return false;
  
     if (seat.unavailable) {
+      showToast('That seat is unavailable and cannot be added.');
       return false;
     }
     if (isInCart(id)) {
+      showToast('That seat is already in your cart.');
+      return false;
+    }
+    if (state.cart.length >= MAX_TICKETS) {
+      showToast(`You can buy at most ${MAX_TICKETS} tickets per order.`);
       return false;
     }
  
@@ -482,17 +497,20 @@ const VENUE = {
     updateSeat(id);
     renderCart();
     renderDetails();
+    showToast(`Added ${seatName(seat)} — ${formatPrice(seat.price)}`);
     return true;
   }
  
   function removeFromCart(id) {
     if (!isInCart(id)) return false;
+    const seat = seatsById.get(id);
  
     state.cart = state.cart.filter((cartId) => cartId !== id);
     saveCart();
     updateSeat(id);
     renderCart();
     renderDetails();
+    showToast(`Removed ${seatName(seat)}`);
     return true;
   }
  
@@ -506,6 +524,7 @@ const VENUE = {
     removed.forEach(updateSeat);
     renderCart();
     renderDetails();
+    showToast('Cart cleared.');
   }
  
   function saveCart() {
@@ -517,6 +536,7 @@ const VENUE = {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch (error) {
+      showToast('Your cart could not be saved (browser storage is unavailable).');
     }
   }
  
@@ -547,6 +567,12 @@ const VENUE = {
   function restoreCart() {
     const { ids, dropped } = loadCart();
     state.cart = ids;
+    if (dropped > 0) {
+      saveCart();
+      showToast('Some saved tickets were no longer valid and were removed.');
+    } else if (ids.length) {
+      showToast(`Restored ${ids.length} ticket${ids.length === 1 ? '' : 's'} from your last visit.`);
+    }
   }
  
   function viewportSize() {
@@ -707,6 +733,15 @@ const VENUE = {
  
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && state.inspectedId) inspectSeat(null);
+    });
+ 
+    window.addEventListener('storage', (event) => {
+      if (event.key !== STORAGE_KEY) return;
+      const previous = state.cart.slice();
+      state.cart = loadCart().ids;
+      new Set([...previous, ...state.cart]).forEach(updateSeat);
+      renderCart();
+      renderDetails();
     });
  
   }
