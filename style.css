@@ -705,3 +705,43 @@ h1, h2, h3 { margin: 0; }
   to   { opacity: 1; transform: none; }
 }
 
+
+@media (max-width: 720px) {
+  .sidebar { grid-template-columns: 1fr; }
+  .viewport { height: 60vh; min-height: 340px; }
+  .hint__mouse { display: none; }
+  .brand__event { font-size: 0.75rem; }
+  .site-header h1 { font-size: 1.1rem; }
+  .brand__mark { width: 36px; height: 36px; font-size: 1.15rem; }
+  .cart-link__text { display: none; }
+ 
+  .ctrl { width: 34px; height: 34px; font-size: 15px; }
+  .zoom-level { min-width: 34px; }
+  .dpad {
+    grid-template-columns: repeat(3, 34px);
+    grid-template-rows: repeat(3, 34px);
+    gap: 3px;
+  }
+  .control-card { padding: 5px; }
+  .zoom-card { top: 8px; right: 8px; }
+  .nav-card { right: 8px; bottom: 8px; }
+  .reset-btn { font-size: 0.75rem; padding: 0.35rem 0.4rem; }
+}
+ 
+@media (max-width: 380px) {
+  .brand__event { display: none; }
+  .legend { gap: 0.75rem; }
+}
+ 
+@media (pointer: coarse) {
+  .hint__mouse { display: none; }
+}
+ 
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+ 

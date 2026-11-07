@@ -657,6 +657,18 @@ const VENUE = {
     applyView(true);
   }
  
+  function ensureSeatVisible(seat) {
+    const { vw, vh } = viewportSize();
+    const view = state.view;
+    const size = VENUE.seatSize * view.scale;
+    const sx = view.x + seat.x * view.scale;
+    const sy = view.y + seat.y * view.scale;
+    const margin = 30;
+    if (sx < margin || sy < margin || sx + size > vw - margin || sy + size > vh - margin) {
+      centerOnSeat(seat, 0);
+    }
+  }
+ 
   function navigate(action) {
     switch (action) {
       case 'zoom-in': zoomAtCenter(ZOOM_STEP); break;
@@ -675,6 +687,16 @@ const VENUE = {
       const button = event.target.closest('.seat');
       if (!button) return;
       inspectSeat(button.dataset.id);
+    });
+ 
+    dom.venue.addEventListener('focusin', (event) => {
+      const button = event.target.closest('.seat');
+      if (button && button.matches(':focus-visible')) ensureSeatVisible(seatsById.get(button.dataset.id));
+    });
+ 
+    dom.viewport.addEventListener('scroll', () => {
+      dom.viewport.scrollTop = 0;
+      dom.viewport.scrollLeft = 0;
     });
  
     document.querySelectorAll('[data-nav]').forEach((button) => {
@@ -701,17 +723,23 @@ const VENUE = {
       switch (button.dataset.action) {
         case 'add':
           if (addToCart(id)) {
+            const next = dom.detailsBody.querySelector('[data-action="remove"]');
+            if (next) next.focus();
           }
           break;
         case 'remove':
           if (removeFromCart(id)) {
+            const next = dom.detailsBody.querySelector('[data-action="add"]');
+            if (next && !next.disabled) next.focus(); else dom.detailsTitle.focus();
           }
           break;
         case 'close':
           inspectSeat(null);
+          dom.detailsTitle.focus();
           break;
         case 'locate':
           centerOnSeat(seatsById.get(id), 1.2);
+          seatEls.get(id).focus({ preventScroll: true });
           break;
         default: break;
       }
@@ -723,9 +751,15 @@ const VENUE = {
       const id = button.dataset.id;
  
       if (button.dataset.action === 'remove') {
+        const item = button.closest('.cart-item');
+        const neighbour = item.nextElementSibling || item.previousElementSibling;
+        const neighbourId = neighbour && neighbour.querySelector('[data-action="remove"]').dataset.id;
         removeFromCart(id);
+        const focusTarget = neighbourId && dom.cartList.querySelector(`[data-action="remove"][data-id="${neighbourId}"]`);
+        (focusTarget || dom.cartTitle).focus();
       } else if (button.dataset.action === 'locate') {
         inspectSeat(id, { center: true });
+        seatEls.get(id).focus({ preventScroll: true });
       }
     });
  
@@ -744,6 +778,15 @@ const VENUE = {
       renderDetails();
     });
  
+    if ('ResizeObserver' in window) {
+      new ResizeObserver(() => {
+        if (state.view.fitted) resetView(false); else applyView(false);
+      }).observe(dom.viewport);
+    } else {
+      window.addEventListener('resize', () => {
+        if (state.view.fitted) resetView(false); else applyView(false);
+      });
+    }
   }
  
   function init() {
