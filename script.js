@@ -112,7 +112,6 @@ const VENUE = {
   ]
 };
 
-
 // APP //
 
 (function () {
@@ -850,14 +849,16 @@ const VENUE = {
       renderDetails();
     });
  
+    let lastWidth = dom.viewport.clientWidth;
+    const onResize = () => {
+      const width = dom.viewport.clientWidth;
+      if (state.view.fitted || Math.abs(width - lastWidth) > 40) resetView(false); else applyView(false);
+      lastWidth = width;
+    };
     if ('ResizeObserver' in window) {
-      new ResizeObserver(() => {
-        if (state.view.fitted) resetView(false); else applyView(false);
-      }).observe(dom.viewport);
+      new ResizeObserver(onResize).observe(dom.viewport);
     } else {
-      window.addEventListener('resize', () => {
-        if (state.view.fitted) resetView(false); else applyView(false);
-      });
+      window.addEventListener('resize', onResize);
     }
   }
  
