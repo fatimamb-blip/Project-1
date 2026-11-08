@@ -112,6 +112,9 @@ const VENUE = {
   ]
 };
 
+
+// APP //
+
 (function () {
   'use strict';
  
@@ -120,6 +123,7 @@ const VENUE = {
   const ZOOM_MAX = 3;
   const ZOOM_STEP = 1.25;
   const PAN_STEP = 120;
+  const DRAG_THRESHOLD = 5;
   const MAX_TICKETS = VENUE.maxTicketsPerOrder;
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
  
@@ -682,6 +686,74 @@ const VENUE = {
     }
   }
  
+  function setupMouseNavigation() {
+    const viewport = dom.viewport;
+ 
+    viewport.addEventListener('wheel', (event) => {
+      event.preventDefault();
+      const rect = viewport.getBoundingClientRect();
+      let delta = event.deltaY;
+      if (event.deltaMode === 1) delta *= 16;
+      else if (event.deltaMode === 2) delta *= rect.height;
+      const factor = clamp(Math.exp(-delta * 0.0015), 0.5, 2);
+      zoomAt(factor, event.clientX - rect.left, event.clientY - rect.top, false);
+    }, { passive: false });
+ 
+    let drag = null;
+    let suppressClick = false;
+ 
+    viewport.addEventListener('pointerdown', (event) => {
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
+      if (event.target.closest('.control-card')) return;
+      drag = {
+        id: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        originX: state.view.x,
+        originY: state.view.y,
+        moved: false
+      };
+    });
+ 
+    viewport.addEventListener('pointermove', (event) => {
+      if (!drag || event.pointerId !== drag.id) return;
+      const dx = event.clientX - drag.startX;
+      const dy = event.clientY - drag.startY;
+ 
+      if (!drag.moved) {
+        if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+        drag.moved = true;
+        viewport.setPointerCapture(event.pointerId);
+        viewport.classList.add('is-dragging');
+      }
+      state.view.x = drag.originX + dx;
+      state.view.y = drag.originY + dy;
+      state.view.fitted = false;
+      applyView(false);
+    });
+ 
+    const endDrag = (event) => {
+      if (!drag || event.pointerId !== drag.id) return;
+      if (drag.moved) {
+        suppressClick = true;
+        setTimeout(() => { suppressClick = false; }, 0);
+        viewport.classList.remove('is-dragging');
+        if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
+      }
+      drag = null;
+    };
+    viewport.addEventListener('pointerup', endDrag);
+    viewport.addEventListener('pointercancel', endDrag);
+ 
+    viewport.addEventListener('click', (event) => {
+      if (suppressClick) {
+        event.stopPropagation();
+        event.preventDefault();
+        suppressClick = false;
+      }
+    }, true);
+  }
+ 
   function bindEvents() {
     dom.venue.addEventListener('click', (event) => {
       const button = event.target.closest('.seat');
@@ -797,6 +869,7 @@ const VENUE = {
     renderCart();
     renderDetails();
     bindEvents();
+    setupMouseNavigation();
     resetView(false);
   }
  
